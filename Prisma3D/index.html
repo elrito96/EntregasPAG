@@ -1,0 +1,499 @@
+<!--PRISMA 3d
+Author: Alvaro Benito Navarro
+Subject: Programación de aplicaciones gráficas 2017/2018
+Center: Escuela de Ingeniería Inofrmática, Universidad de Valladolid, Spain
+-->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebGL - PRISMA3D</title>
+<style>
+        body{ background-color: grey; }
+      canvas{ background-color: white;
+              border: 1px solid black; }
+         div{ display:block;
+              align
+
+                                      }
+									  
+
+</style>
+
+<script src = "./gl-matrix-min.js"></script>
+
+<script>
+
+  // ****************** Variables Globales
+  var   gl = null,
+        canvas = null,
+        glProgram = null,
+        fragmentShader = null,
+        vertexShader = null;
+  var   positionLocatAttrib =null,
+        colorLocatAttrib=null;
+
+  var   VerticeBuffer = null;
+  var   Vertices=null; //coord de los vértices
+        
+  var   IndexVerticeBuffer=null;
+  var   IndVertices; //indices de los triangulos
+
+  var   triVerticeColors, //colores
+        triColorBuffer, //buffer de colores a cada vertice
+		corx,
+		cory;
+/*
+    var translation=0 ;
+    var tx=0,ty=0;
+    var angulo = 0;
+    var rotation=0; //angulo en radianes
+
+    var matrix;
+    var matLocatUniform=null;
+*/
+      
+      
+/********************* 0. UTILIDADES **************************************/ 
+  /****** 
+  FunCiones de actualización 
+  ********* */
+/*
+
+  function updateAngle (){
+    var grados = angulo.value;
+    rotation=degToRad(grados);
+    drawScene();
+   }   
+*/
+   /* GRADOS*/
+  /* 
+  function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+    }
+*/
+
+
+/********************* 1. INIT WEBGL **************************************/ 
+function initWebGL()
+      {
+        canvas = document.getElementById("canvas");         
+        gl = canvas.getContext("webgl");
+                
+        if(gl)
+        {
+			canvas.addEventListener("mousedown", onMouseDown, false);
+		canvas.addEventListener("mouseup", onMouseUp, false);
+		canvas.addEventListener("mousemove", onMouseMove, false);
+          setupWebGL();
+          initShaders();
+          setupBuffersAndDraw(0,0);
+        } 
+        else{  
+          alert(  "El navegador no soporta WEBGL.");
+        }
+      }
+      /********************* 2.setupWEBGL **************************************/ 
+      function setupWebGL()
+      {
+        //Pone el color de fondo a verde ---para 2d no funciona
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);  
+        gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT); 
+        
+        //Crea un viewport del tamaño del canvas
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        // Modo ON DEPTH
+        gl.enable(gl.DEPTH_TEST);
+
+        //Creacion de Matrices
+        /*
+        matR=mat3.create();
+        matT=mat3.create();
+        
+        translation=vec2.create();
+        matrix=mat3.create();
+        //ObtenerDatos
+        tx=document.getElementById("x");
+        ty=document.getElementById("y");
+        angulo=document.getElementById("angulo");
+        */
+      }
+      /********************* 3. INIT SHADER **************************************/ 
+      function initShaders()
+      {
+       // Esta función inicializa los shaders
+       
+        //1.Obtengo la referencia de los shaders 
+        var fs_source = document.getElementById('fragment-shader').innerHTML;
+        var vs_source = document.getElementById('vertex-shader').innerHTML;
+
+        //2. Compila los shaders  
+        vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+        fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+        
+          //3. Crea un programa
+          glProgram = gl.createProgram();
+        
+        //4. Adjunta al programa cada shader
+          gl.attachShader(glProgram, vertexShader);
+          gl.attachShader(glProgram, fragmentShader);
+          gl.linkProgram(glProgram);
+
+        if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+           alert("No se puede inicializar el Programa .");
+          }
+        
+        //5. Usa el programa
+        gl.useProgram(glProgram);
+      }
+     /********************* 3.1. MAKE SHADER **************************************/ 
+      function makeShader(src, type)
+      {
+        //Compila cada  shader
+        var shader = gl.createShader(type);
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+              alert("Error de compilación del shader: " + gl.getShaderInfoLog(shader));
+          }
+        return shader;
+      }
+	   
+     /********************* 4 SETUP BUFFERS  **************************************/ 
+
+		var previousMousePosition = {
+			x: 0,
+			y: 0
+		};
+
+		var mouseDown = false;
+		function onMouseDown(e) {
+			mouseDown = true;
+			corx=e.offsetX;
+			cory=e.offsetY;
+		}
+		function onMouseUp(e) {
+			mouseDown = false;
+		}
+		function onMouseMove(e) {
+			if (!mouseDown) return;
+			
+			if(previousMousePosition.x==0&&previousMousePosition.y==0){
+				var cursor = {
+				x: e.offsetX-corx,
+				y: e.offsetY-cory
+				};
+			}else{
+				var cursor = {
+					x: e.offsetX-previousMousePosition.x,
+					y: e.offsetY-previousMousePosition.y
+				};
+			}
+			
+			setupBuffersAndDraw(cursor.x,cursor.y);
+
+		}
+	  function setupBuffersAndDraw(xrot, yrot)
+      {  
+        //DEFINCION DEL PRISMA
+          Vertices = [ 
+          -0.50,-0.5,0, //0
+          -0.25,-0.5,0.25, //1
+          0.25,-0.5,0.25, //2
+          0.5,-0.5,0, //3
+          0.25,-0.5,-0.25, //4
+          -0.25,-0.5,-0.25, //5
+          -0.50,0.5,0, //6
+          -0.25,0.5,0.25, //7
+          0.25,0.5,0.25, //8
+          0.5,0.5,0, //9
+          0.25,0.5,-0.25, //10
+          -0.25,0.5,-0.25, //11
+		  
+		  -0.50,-0.5,0, //0
+          -0.25,-0.5,0.25, //1
+          0.25,-0.5,0.25, //2
+          0.5,-0.5,0, //3
+          0.25,-0.5,-0.25, //4
+          -0.25,-0.5,-0.25, //5
+          -0.50,0.5,0, //6
+          -0.25,0.5,0.25, //7
+          0.25,0.5,0.25, //8
+          0.5,0.5,0, //9
+          0.25,0.5,-0.25, //10
+          -0.25,0.5,-0.25, //11
+		  
+		  -0.50,-0.5,0, //0
+          -0.25,-0.5,0.25, //1
+          0.25,-0.5,0.25, //2
+          0.5,-0.5,0, //3
+          0.25,-0.5,-0.25, //4
+          -0.25,-0.5,-0.25, //5
+          -0.50,0.5,0, //6
+          -0.25,0.5,0.25, //7
+          0.25,0.5,0.25, //8
+          0.5,0.5,0, //9
+          0.25,0.5,-0.25, //10
+          -0.25,0.5,-0.25, //11
+        ];
+		
+		rotarXvertices(Vertices,-yrot);
+		rotarYvertices(Vertices,-xrot);
+		//modifica los vertices para dar "sensacion" de perspectiva
+		perspectiva(Vertices);
+		
+		
+        // BUffer que almacena los vértices
+        VerticeBuffer = gl.createBuffer();
+       gl.bindBuffer(gl.ARRAY_BUFFER, VerticeBuffer);
+       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(Vertices), gl.STATIC_DRAW); 
+    
+      IndVertices=[
+       //cara atras izquierda
+       0,1,6,
+       6,1,7,
+	   
+       //cara atras centro
+       13,2,19,
+       2,8,19,
+	   
+       //cara atras derecha
+       14,3,20,
+       3,9,20,
+	   
+       //cara frente derecha
+       15,4,21,
+       21,4,10,
+	   
+       //cara frente centro
+       22,16,11,
+       16,5,11,
+	   
+       //cara frente izquierda
+       17,6,23,
+       12,6,17,
+	   
+	   //cara abajo
+       24,25,29,
+       25,26,29,
+       26,28,29,
+       26,27,28,
+	   
+	   //cara arriba
+       30,31,35,
+       31,32,35,
+       32,34,35,
+       32,33,34,
+
+       ];
+	
+        //BUFFER PARA IBO
+        IndexVerticeBuffer = gl.createBuffer();
+        //Longitud del buffer
+        IndexVerticeBuffer.number_vertex_points=IndVertices.length;
+        //Se lee dice que el buffer almacena los indices a los vértices
+       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, IndexVerticeBuffer);
+       // Los indices serán enteros, no necesitamos más espacio
+       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(IndVertices), gl.STATIC_DRAW); 
+
+              
+        /* +++++++++++++++++++++++++ 
+       **BUFFER PARA ATRIBUTO POSICION DE VERTICES
+       */
+       //Busca dónde debe ir la posicion de los vértices en el programa.
+       positionLocatAttrib = gl.getAttribLocation(glProgram, "a_VertexPosition");
+       gl.enableVertexAttribArray(positionLocatAttrib);
+       //Enlazo con las posiciones de los vértices
+       gl.bindBuffer(gl.ARRAY_BUFFER, VerticeBuffer);
+       gl.vertexAttribPointer(positionLocatAttrib, 3, gl.FLOAT, false, 0, 0);
+
+        // Se la recuerda que utilice los indices de arrays
+       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, IndexVerticeBuffer);
+
+            /* ******* COLORES ******* */
+        var triVerticeColors = [ 
+          //cara1
+           1.0, 0.0, 0.0,
+           1.0, 0.0, 0.0,
+           1.0, 0.0, 0.0,
+		   1.0, 0.0, 0.0,
+		   
+        
+          //CARA2
+          1.0, 0.0, 1.0,
+		  1.0, 0.0, 1.0,
+		  1.0, 0.0, 1.0,
+		  1.0, 0.0, 1.0,
+          
+
+          //CARA3
+           0.0, 0.0, 1.0,
+           0.0, 0.0, 1.0,
+		   0.0, 0.0, 1.0,
+		   0.0, 0.0, 1.0,
+        
+          //CARA 4
+          0.9, 0.5, 0.0,
+		  0.9, 0.5, 0.0,
+		  0.9, 0.5, 0.0,
+		  0.9, 0.5, 0.0,
+		  
+		  //CARA 5
+		  0.0,1.0,0.0,
+		  0.0,1.0,0.0,
+		  0.0,1.0,0.0,
+		  0.0,1.0,0.0,
+		  
+		  //CARA 6
+		  0.0,1.0,1.0,
+		  0.0,1.0,1.0,
+		  0.0,1.0,1.0,
+		  0.0,1.0,1.0,
+		  
+		  //INFERIOR
+		  
+		  0.0,0.5,0.75,
+		  0.0,0.5,0.75,
+		  0.0,0.75,0.5,
+		  0.0,0.5,0.75,
+		  0.0,0.5,0.75,
+		  0.0,0.75,0.5,
+		  0.0,0.75,0.75,
+		  0.0,0.75,0.75,
+		  
+		  //SUPERIOR
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+		 0.9,0.1,0.66,
+        ];
+
+
+        triColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, triColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triVerticeColors), gl.STATIC_DRAW);  
+
+            /*
+            ** BUFFER PARA ATRIBUTO COLOR DE VERTICES
+            */
+       colorLocatAttrib = gl.getAttribLocation(glProgram, "a_VertexColor");
+       gl.enableVertexAttribArray(colorLocatAttrib);
+       gl.bindBuffer(gl.ARRAY_BUFFER, triColorBuffer);
+       gl.vertexAttribPointer(colorLocatAttrib, 3, gl.FLOAT, false, 0, 0);
+		drawScene()
+      }   
+	  function perspectiva(m){
+	    var cont=0;
+		var zfila=0;
+		for(var i=0;i<m.length;i=i+3){
+			zfila=m[i+2]+1.25;
+			m[i]=m[i]/zfila;
+			m[i+1]=m[i+1]/zfila;
+		}
+	   
+	   }
+	   function rotarXvertices(m,angulo){
+	    rad = angulo * Math.PI / 180;
+		var c = Math.cos(rad);
+		var s = Math.sin(rad);
+		var x;
+		var y;
+		for(var i=0;i<m.length;i=i+3){
+			x=m[i];
+			y=m[i+1];
+			z=m[i+2];
+			
+			m[i+1]=(y*c)-(z*s);
+			m[i+2]=(y*s)+(z*c);
+		}
+	  }
+	  function rotarYvertices(m,angulo){
+	    rad = angulo * Math.PI / 180;
+		var c = Math.cos(rad);
+		var s = Math.sin(rad);
+		var x;
+		var y;
+		for(var i=0;i<m.length;i=i+3){
+			x=m[i];
+			y=m[i+1];
+			z=m[i+2];
+			
+			m[i]=(c*m[i])+(z*s);
+			m[i+2]=(c*z)-(s*x);
+		}
+	  }
+	  function rotarZvertices(m,angulo){
+	    rad = angulo * Math.PI / 180;
+		var c = Math.cos(rad);
+		var s = Math.sin(rad);
+		var x;
+		var y;
+		for(var i=0;i<m.length;i=i+3){
+			x=m[i];
+			y=m[i+1];
+			m[i]=(c*x)-(y*s);
+			m[i+1]=(s*x)+(c*y);
+		}
+		}
+
+/********************* Draw Scene        *********************************** */
+       function drawScene(){
+
+       gl.drawElements(gl.TRIANGLES, IndexVerticeBuffer.number_vertex_points, gl.UNSIGNED_SHORT,0);
+
+          }
+
+
+
+</script>
+<!-- ****************   VERTEX SHADER *******************-->
+<script id="vertex-shader" type="x-shader/x-vertex">
+
+  attribute vec3 a_VertexPosition;
+  attribute vec3 a_VertexColor;
+
+  varying highp vec4 vColor;
+
+
+void main() {
+  
+  
+   gl_Position= vec4(a_VertexPosition,1.0);
+   
+
+   vColor= vec4(a_VertexColor,1.0);
+   
+}
+</script>
+<!-- ****************   FRAGMENT SHADER *******************-->
+<script id="fragment-shader" type="x-shader/x-fragment">
+//uniform vec4 uColor;
+varying  highp vec4 vColor;
+void main() {
+  //Color rojo
+   gl_FragColor = vColor;
+}
+</script>
+
+
+<!-- ****************                    *******************-->
+<!-- ****************   html             *******************-->
+<!-- ****************                    *******************-->
+
+</head>
+<body onload="initWebGL()">
+<div class="description">
+  Arrastrar el prisma con el ratón para rotar
+</div>
+<canvas id="canvas" width="600" height="600"></canvas>
+
+</body>
+</html>
+
+

@@ -1,0 +1,592 @@
+<!--
+Author: Alvaro Benito Navarro
+Subject: Programación de aplicaciones gráficas 2017/2018
+Center: Escuela de Ingeniería Inofrmática, Universidad de Valladolid, Spain
+-->
+<!-- A partir del programa del rectángulo, he stado quitanfdo cosas y poniendolas al estilo que os enseñe
+     Por lo que:
+      1) No hay fichero .js
+      2) No hay fichero .css
+      3) La parte de initWebGL es el verdadero main
+      4) He dejado varias instrucciones comentadas para que veais la diferencia
+
+      Este ejemplo hace triángulos de tamaño y altura fija en posiciones distintas (random)
+
+      ***** Sistema de coordenadas de webgl [-1,+1].... mi vertex shader no hace nada
+    -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebGL - 2D Q</title>
+<style>
+        body{ background-color: grey; }
+      canvas{ background-color: white;
+              border: 1px solid black; }
+		#slideY{
+		transform: rotate(270deg);
+		width: 385%;
+		}
+		#slider2{
+		 
+		 position: absolute;
+		 left: 375px;
+		top: 350px;
+		}
+		#texto2{
+		 position: absolute;
+		 left: 355px;
+		 top: 0px;
+		}
+		
+		#slideX{
+		width: 385%;
+		}
+		#slider1{
+		 
+		 position: absolute;
+		 left: 0px;
+		top: 700px;
+		}
+		#texto1{
+		 position: absolute;
+		 left: 250px;
+		 top: 30px;
+		}
+
+</style>
+<div id="slider1">
+  <input type="range" min="-300" max="300" value="0" class="slider" id="slideX" oninput="setupBuffersAndDraw()">
+	<b id=texto1> Horizontal </b>
+  </div>
+<div id="slider2">
+  <input type="range" min="-300" max="300" value="0" class="slider" id="slideY" oninput="setupBuffersAndDraw()">
+  <b id="texto2"> Vertical </b>
+</div>
+<div id="slider3">
+  <input type="range" min="0" max="360" value="0" class="slider" id="rotX" oninput="setupBuffersAndDraw()">
+  <b> Rotacion respecto a X </b>
+</div>
+<div id="slider4">
+  <input type="range" min="0" max="360" value="0" class="slider" id="rotY" oninput="setupBuffersAndDraw()">
+  <b> Rotacion respecto a Y </b>
+</div>
+<div id="slider5">
+  <input type="range" min="0" max="360" value="0" class="slider" id="rotZ" oninput="setupBuffersAndDraw()">
+  <b> Rotacion respecto a Z </b>
+</div>
+<script>
+
+  // ****************** Variables Globales
+  var   gl = null,
+        canvas = null,
+        glProgram = null,
+        fragmentShader = null,
+        vertexShader = null;
+        positionLocatAttrib =null,
+        colorLocatAttrib = null,
+        triColorBuffer =null,
+        triVerticeBuffer = null;
+		despX=document.getElementById("slideX");
+		despY=document.getElementById("slideY");
+        rotX=document.getElementById("rotX");
+		rotY=document.getElementById("rotY");
+		rotZ=document.getElementById("rotZ");
+        
+/********************* 1. INIT WEBGL **************************************/ 
+function initWebGL()
+      {
+        canvas = document.getElementById("canvas");  
+        
+        //gl = canvas.getContext("webgl");          
+        gl = canvas.getContext("webgl");
+                
+        if(gl)
+        {
+          setupWebGL();
+          initShaders();
+          setupBuffersAndDraw();
+   
+        } 
+        else{  
+          alert(  "El navegador no soporta WEBGL.");
+        }
+      }
+      /********************* 2.setupWEBGL **************************************/ 
+      function setupWebGL()
+      {
+        //Pone el color de fondo a verde ---para 2d no funciona
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);  
+        gl.clear(gl.COLOR_BUFFER_BIT);  
+        
+        //Crea un viewport del tamaño del canvas
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+      /********************* 3. INIT SHADER **************************************/ 
+      function initShaders()
+      {
+       // Esta función inicializa los shaders
+       
+        //1.Obtengo la referencia de los shaders 
+        var fs_source = document.getElementById('fragment-shader').innerHTML;
+        var vs_source = document.getElementById('vertex-shader').innerHTML;
+
+        //2. Compila los shaders  
+        vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+        fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+        
+          //3. Crea un programa
+          glProgram = gl.createProgram();
+        
+        //4. Adjunta al programa cada shader
+          gl.attachShader(glProgram, vertexShader);
+          gl.attachShader(glProgram, fragmentShader);
+          gl.linkProgram(glProgram);
+
+        if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+           alert("No se puede inicializar el Programa .");
+          }
+        
+        //5. Usa el programa
+        gl.useProgram(glProgram);
+      }
+     /********************* 3.1. MAKE SHADER **************************************/ 
+      function makeShader(src, type)
+      {
+        //Compila cada  shader
+        var shader = gl.createShader(type);
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+              alert("Error de compilación del shader: " + gl.getShaderInfoLog(shader));
+          }
+        return shader;
+      }
+	   /**conversor pixeles a -1,1*/
+	  function pixelAnorm(pixel,eje){
+		//canvas.width, canvas.height
+		var ancho=canvas.width;
+		var alto=canvas.height;
+		var rotaX = rotX.value;
+		var rotaY = rotX.value;
+		var result;
+		pixel=pixel+300;
+		if(eje==0){ //eje X
+			result=(((pixel+despX.value/1)/ancho)*2)-1;
+		}else{  	//eje Y
+			result=(((pixel+despY.value/1)/alto)*2)-1;
+		}
+		return result;
+	  }
+	  function rotarXvertices(m,angulo){
+	    rad = angulo * Math.PI / 180;
+		var c = Math.cos(rad);
+		var s = Math.sin(rad);
+		var x;
+		var y;
+		console.log(rad);
+		for(var i=0;i<m.length;i=i+2){
+			x=m[i];
+			y=m[i+1];
+			m[i+1]=(y*c);
+		}
+	  }
+	  function rotarYvertices(m,angulo){
+	    rad = angulo * Math.PI / 180;
+		var c = Math.cos(rad);
+		var s = Math.sin(rad);
+		var x;
+		var y;
+		console.log(rad);
+		for(var i=0;i<m.length;i=i+2){
+			x=m[i];
+			y=m[i+1];
+			m[i]=(c*x);
+		}
+	  }
+	  function rotarZvertices(m,angulo){
+	    rad = angulo * Math.PI / 180;
+		var c = Math.cos(rad);
+		var s = Math.sin(rad);
+		var x;
+		var y;
+		console.log(rad);
+		for(var i=0;i<m.length;i=i+2){
+			x=m[i];
+			y=m[i+1];
+			m[i]=(c*x)-(y*s);
+			m[i+1]=(s*x)+(c*y);
+		}
+	  }
+
+
+     /********************* 4 SETUP BUFFERS  **************************************/ 
+      function setupBuffersAndDraw()
+      {  
+          var triVertices = [ 
+			//0 
+			pixelAnorm(0,0), pixelAnorm(0,1), 
+			//1 
+			pixelAnorm(0,0), pixelAnorm(200,1), //1 : 0,200
+			//2 PODRIA AHORRARME EL 2
+			pixelAnorm(0,0), pixelAnorm(138,1), //2 : 0,138
+			//3
+			pixelAnorm(101,0), pixelAnorm(138,1), //3 : 199,138
+			//4 PODRIA AHORRARRME EL 4
+			pixelAnorm(78,0), pixelAnorm(0,1), //4 : 222,0
+			//5
+			pixelAnorm(142,0), pixelAnorm(0,1), //5 : 158,0
+			//6
+			pixelAnorm(78,0), pixelAnorm(138,1),  //6 : 222,138
+			//7 
+			pixelAnorm(48,0), pixelAnorm(110,1), //7 : 252,110
+			//8
+			pixelAnorm(135,0), pixelAnorm(60,1), //8 : 165,60
+			//9
+			pixelAnorm(124,0), pixelAnorm(98,1), //9 : 176,98
+			//10
+			pixelAnorm(63,0), pixelAnorm(84,1), //10 : 237,84
+			//11
+			pixelAnorm(30,0), pixelAnorm(128,1), //11 : 270,128
+			//12
+			pixelAnorm(71,0), pixelAnorm(61,1),  //12 : 229,61
+			//13
+			pixelAnorm(74,0), pixelAnorm(170,1), //13 : 226,170
+			//14
+			pixelAnorm(39,0), pixelAnorm(191,1),  //14 : 261,91
+			
+			
+			//15
+			pixelAnorm(0,0), pixelAnorm(200,1), //1X
+			//16... PODRIA AHORRARME EL 2
+			pixelAnorm(0,0), pixelAnorm(138,1), //2X
+			//3
+			pixelAnorm(-101,0), pixelAnorm(138,1), //3X
+			//4 PODRIA AHORRARRME EL 4
+			pixelAnorm(-78,0), pixelAnorm(0,1), //4X
+			//5
+			pixelAnorm(-142,0), pixelAnorm(0,1), //5X
+			//6
+			pixelAnorm(-78,0), pixelAnorm(138,1),  //6X
+			//7 
+			pixelAnorm(-48,0), pixelAnorm(110,1), //7X
+			//8
+			pixelAnorm(-135,0), pixelAnorm(60,1), //8X
+			//9
+			pixelAnorm(-124,0), pixelAnorm(98,1), //9X
+			//10
+			pixelAnorm(-63,0), pixelAnorm(84,1), //10X
+			//11
+			pixelAnorm(-30,0), pixelAnorm(128,1), //11X
+			//12
+			pixelAnorm(-71,0), pixelAnorm(61,1),  //12X
+			//13
+			pixelAnorm(-74,0), pixelAnorm(170,1), //13X
+			//14
+			pixelAnorm(-39,0), pixelAnorm(191,1),  //14X
+			
+			//3 cuad
+			
+			//29
+			pixelAnorm(0,0), pixelAnorm(-200,1), //1X
+			//30... PODRIA AHORRARME EL 2
+			pixelAnorm(0,0), pixelAnorm(-138,1), //2X
+			//31
+			pixelAnorm(-101,0), pixelAnorm(-138,1), //3X
+			//32 PODRIA AHORRARRME EL 4
+			pixelAnorm(-78,0), pixelAnorm(-0,1), //4X
+			//5
+			pixelAnorm(-142,0), pixelAnorm(-0,1), //5X
+			//6
+			pixelAnorm(-78,0), pixelAnorm(-138,1),  //6X
+			//7 
+			pixelAnorm(-48,0), pixelAnorm(-110,1), //7X
+			//8
+			pixelAnorm(-135,0), pixelAnorm(-60,1), //8X
+			//9
+			pixelAnorm(-124,0), pixelAnorm(-98,1), //9X
+			//10
+			pixelAnorm(-63,0), pixelAnorm(-84,1), //10X
+			//11
+			pixelAnorm(-30,0), pixelAnorm(-128,1), //11X
+			//12
+			pixelAnorm(-71,0), pixelAnorm(-61,1),  //12X
+			//13
+			pixelAnorm(-74,0), pixelAnorm(-170,1), //13X
+			//42
+			pixelAnorm(-39,0), pixelAnorm(-191,1),  //14X
+			
+			//4 cuadr
+			
+			//1 
+			pixelAnorm(0,0), pixelAnorm(-200,1), //1 : 0,200
+			//2 PODRIA AHORRARME EL 2
+			pixelAnorm(0,0), pixelAnorm(-138,1), //2 : 0,138
+			//3
+			pixelAnorm(101,0), pixelAnorm(-138,1), //3 : 199,138
+			//4 PODRIA AHORRARRME EL 4
+			pixelAnorm(78,0), pixelAnorm(-0,1), //4 : 222,0
+			//5
+			pixelAnorm(142,0), pixelAnorm(-0,1), //5 : 158,0
+			//6
+			pixelAnorm(78,0), pixelAnorm(-138,1),  //6 : 222,138
+			//7 
+			pixelAnorm(48,0), pixelAnorm(-110,1), //7 : 252,110
+			//8
+			pixelAnorm(135,0), pixelAnorm(-60,1), //8 : 165,60
+			//9
+			pixelAnorm(124,0), pixelAnorm(-98,1), //9 : 176,98
+			//10
+			pixelAnorm(63,0), pixelAnorm(-84,1), //10 : 237,84
+			//11
+			pixelAnorm(30,0), pixelAnorm(-128,1), //11 : 270,128
+			//12
+			pixelAnorm(71,0), pixelAnorm(-61,1),  //12 : 229,61
+			//13
+			pixelAnorm(74,0), pixelAnorm(-170,1), //13 : 226,170
+			//56
+			pixelAnorm(39,0), pixelAnorm(-191,1),  //14 : 261,91
+			
+			//RABILLOs
+			
+			//57
+			pixelAnorm(48,0), pixelAnorm(-72,1),  //12 :  348,372
+			//58
+			pixelAnorm(77,0), pixelAnorm(-207,1), //13 :   377,507
+			//59
+			pixelAnorm(17,0), pixelAnorm(-80,1),  //14 :   317,383
+			
+			//el 1 del anterior 57
+			
+			//60
+			pixelAnorm(142,0), pixelAnorm(-178,1), //13 : 442,478
+			
+			//el 2 del anterior //58
+        ];
+		
+		/*for(var i=0;i<triVertices.length;i++){
+			if(i%2==0){
+				triVertices[i]=triVertices[i]+pixelAnorm(despX,1);
+			}else{
+				triVertices[i]=triVertices[i]+pixelAnorm(despY,1);
+			}
+			
+		}*/
+
+        //BUFFER PARA POSICIONES
+		rotarXvertices(triVertices,rotX.value);
+		rotarYvertices(triVertices,rotY.value);
+		rotarZvertices(triVertices,rotZ.value);
+        triVerticeBuffer = gl.createBuffer();
+       gl.bindBuffer(gl.ARRAY_BUFFER, triVerticeBuffer);
+       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triVertices), gl.STATIC_DRAW); 
+      
+       
+/* +++++++++++++++++++++++++ 
+
+            **BUFFER PARA ATRIBUTO POSICION DE VERTICES
+            */
+		IndVertices=[
+		//1 cuad
+		1,3,17,
+		1,14,3,
+		14,13,3,
+		2,6,11,
+		6,7,11,
+		6,10,7,
+		6,12,10,
+		6,4,12,
+		6,5,48,//merger quitar 4 poner una coord del 4 cuadr //6,5,4
+		6,3,5,
+		3,9,5,
+		9,8,5,
+		//2 cuad
+		15,28,17,
+		28,27,17,
+		16,20,25,
+		20,21,25,
+		20,24,21,
+		20,26,24,
+		20,18,26,
+		20,19,34,//candidato //cambiar 18 porrr 34 (20,19,18=
+		20,17,19,
+		17,23,19,
+		23,22,19,
+		//3 cuad
+		29,31,45, //abajo, abajo a la izquierda arriba
+		29,42,31,
+		42,41,31,
+		30,34,39,
+		34,35,39,
+		34,38,35,
+		34,40,38,
+		34,32,40,
+		//34,33,32, // canddidato
+		34,31,33,
+		31,37,33,
+		37,36,33,
+		//4 cuad
+		//43,45,44, //abajo, abajo a la dderecha, arriba
+		43,56,45,
+		56,55,45,
+		44,48,53,
+		48,49,53,
+		48,52,49,
+		48,54,52,
+		48,46,54,
+		//48,47,46,//este es el clave
+		48,45,47,
+		45,51,47,
+		51,50,47,
+		//rabillo
+		57,58,59,
+		57,60,58,
+		];
+
+        //BUFFER PARA IBO
+        IndexVerticeBuffer = gl.createBuffer();
+        //Longitud del buffer
+        IndexVerticeBuffer.number_vertex_points=IndVertices.length;
+        //Se lee dice que el buffer almacena los indices a los vértices
+       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, IndexVerticeBuffer);
+	   
+	   // Los indices serán enteros, no necesitamos más espacio
+       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(IndVertices), gl.STATIC_DRAW); 
+	   
+	    /*var triVerticeColors = [ 
+		//v1 
+        
+		 1.0, 0.0, 0.0,
+           1.0, 1.0, 0.0,
+           1.0, 0.0, 0.0,
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.5, 1.0, 1.0,
+          0.0, 1.0, 1.0,
+           1.0, 0.0, 0.0,
+           1.0, 1.0, 0.0,
+           1.0, 0.0, 0.0, 
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          1.0, 0.78, 1.0,
+          0.0, 1.0, 1.0,
+           1.0, 0.0, 0.0,
+           1.0, 1.0, 0.0,
+           1.0, 0.0, 0.0,
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          1.0, 0.0, 1.0,
+          0.0, 1.0, 1.0, 
+           1.0, 0.0, 0.0,
+           1.0, 1.0, 0.0,
+           1.0, 0.0, 0.0,
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          1.0, 0.78, 1.0,
+          0.0, 1.0, 1.0,
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          1.0, 0.78, 1.0,
+          0.0, 1.0, 1.0,
+		  1.0, 0.0, 0.0,
+           1.0, 1.0, 0.0,
+           1.0, 0.0, 0.0,
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          1.0, 0.78, 1.0,
+          0.0, 1.0, 1.0,
+           1.0, 0.0, 0.0,
+           1.0, 1.0, 0.0,
+           1.0, 0.0, 0.0, 
+          0.0, 0.0, 1.0,
+           1.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 0.0, 1.0,
+          0.0, 1.0, 1.0,
+          0.0, 1.0, 1.0,
+           1.0, 0.0, 0.0,
+         
+        ];*/
+		
+		var triVerticeColors = [];
+		for(var i = 0; i<183;i++){
+			var n = Math.random();
+			triVerticeColors[i]=n;
+		}
+
+		
+        // BUFFER PARA COLORES
+        triColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, triColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triVerticeColors), gl.STATIC_DRAW);  
+
+           
+            //Busca dónde debe ir la posicion de los vértices en el programa.
+            positionLocatAttrib = gl.getAttribLocation(glProgram, "a_VertexPosition");
+            gl.enableVertexAttribArray(positionLocatAttrib);
+            gl.bindBuffer(gl.ARRAY_BUFFER, triVerticeBuffer);
+            gl.vertexAttribPointer(positionLocatAttrib, 2, gl.FLOAT, false, 0, 0);
+            
+            /*
+            ** BUFFER PARA ATRIBUTO COLOR DE VERTICES
+            */
+            colorLocatAttrib = gl.getAttribLocation(glProgram, "a_VertexColor");
+            gl.enableVertexAttribArray(colorLocatAttrib);
+            gl.bindBuffer(gl.ARRAY_BUFFER, triColorBuffer);
+            gl.vertexAttribPointer(colorLocatAttrib, 3, gl.FLOAT, false, 0, 0);
+
+            // Draw the rectangle.
+            drawScene();
+          }//de la funcion
+	function drawScene(){
+		gl.drawElements(gl.TRIANGLES, IndexVerticeBuffer.number_vertex_points, gl.UNSIGNED_SHORT,0);
+	console.log("Desp X es "+despX.value);
+	console.log("Despe Y es "+despY.value);
+	}
+	
+
+</script>
+<!-- ****************   VERTEX SHADER *******************-->
+<script id="vertex-shader" type="x-shader/x-vertex">
+
+attribute vec2 a_VertexPosition;
+attribute vec3 a_VertexColor;
+
+varying highp vec4 vColor;
+
+void main() {
+  
+  //AHORA SOLO LE AÑADO LAS COORDENADAS
+   gl_Position = vec4(a_VertexPosition,0.0,1.0);
+   vColor= vec4(a_VertexColor,1.0);
+}
+</script>
+<!-- ****************   FRAGMENT SHADER *******************-->
+<script id="fragment-shader" type="x-shader/x-fragment">
+varying  highp vec4 vColor;
+
+void main() {
+   gl_FragColor = vColor;
+   
+}
+</script>
+</head>
+<body onload="initWebGL()">
+<canvas id="canvas" width="600" height="600"></canvas>
+</body>
+</html>
+
+
